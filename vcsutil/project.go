@@ -7,13 +7,18 @@ import (
 	"path/filepath"
 )
 
-// FindProjectDirectory will try to find the project directory based on repository folders (.git)
-func FindProjectDirectory() (string, error) {
+// FindProjectDirectoryFromWorkDir will try to find the project directory from the current working directory
+func FindProjectDirectoryFromWorkDir() (string, error) {
 	currentDirectory, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
+	return FindProjectDirectory(currentDirectory)
+}
+
+// FindProjectDirectory will try to find the project directory from a given directory
+func FindProjectDirectory(currentDirectory string) (string, error) {
 	directoryParts := filepath.SplitList(currentDirectory)
 	for {
 		// check: current directory is a git repository
