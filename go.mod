@@ -7,6 +7,7 @@ require (
 	github.com/go-git/go-git/v5 v5.7.0
 	github.com/gosimple/slug v1.13.1
 	github.com/rs/zerolog v1.29.1
+	github.com/sergi/go-diff v1.3.1
 	github.com/stretchr/testify v1.8.4
 )
 
@@ -28,7 +29,6 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/pjbgf/sha1cd v0.3.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/skeema/knownhosts v1.1.1 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect

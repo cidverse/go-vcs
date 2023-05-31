@@ -2,6 +2,7 @@ package gitclient
 
 import (
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path"
@@ -261,6 +262,95 @@ func (c GitClient) FindCommitsBetween(from *vcsapi.VCSRef, to *vcsapi.VCSRef, in
 	}
 
 	return commits, nil
+}
+
+func (c GitClient) Diff(from *vcsapi.VCSRef, to *vcsapi.VCSRef) ([]vcsapi.VCSDiff, error) {
+	var result []vcsapi.VCSDiff
+
+	// from reference
+	var fromHash plumbing.Hash
+	if from == nil {
+		head, headErr := c.repo.Head()
+		if headErr != nil {
+			return nil, headErr
+		}
+		fromHash = head.Hash()
+	} else {
+		fromHash, _ = refToHash(c.repo, c.VCSRefToInternalRef(*from))
+	}
+
+	// to reference
+	var toHash plumbing.Hash
+	if to != nil {
+		toHash, _ = refToHash(c.repo, c.VCSRefToInternalRef(*to))
+	}
+
+	// find commits
+	fromCommit, err := c.repo.CommitObject(fromHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit object for %s: %v", fromHash.String(), err)
+	}
+	toCommit, err := c.repo.CommitObject(toHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit object for %s: %v", fromHash.String(), err)
+	}
+
+	// diff
+	patch, err := fromCommit.Patch(toCommit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get patch: %v", err)
+	}
+
+	for _, filePatch := range patch.FilePatches() { // except for the changed files this is broken, manually diff the files
+		// ignore empty patches (binary files, submodule refs updates)
+		if filePatch.IsBinary() || len(filePatch.Chunks()) == 0 {
+			continue
+		}
+
+		fileFrom, fileTo := filePatch.Files()
+		fd := vcsapi.VCSDiff{}
+		if fileFrom != nil {
+			fd.FileFrom = vcsapi.CommitFile{Name: fileFrom.Path(), Hash: fileFrom.Hash().String(), Mode: fileFrom.Mode().String()}
+		}
+		if fileTo != nil {
+			fd.FileTo = vcsapi.CommitFile{Name: fileTo.Path(), Hash: fileTo.Hash().String(), Mode: fileTo.Mode().String()}
+		}
+
+		if fileFrom != nil && fileTo != nil {
+			// correct diff
+			srcTree, err := fromCommit.Tree()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get tree from commit: %v", err)
+			}
+			srcFile, err := srcTree.File(fileFrom.Path())
+			if err != nil {
+				return nil, fmt.Errorf("failed to get file from tree: %v", err)
+			}
+			srcContent, err := srcFile.Contents()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get file content: %v", err)
+			}
+
+			dstTree, err := toCommit.Tree()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get tree from commit: %v", err)
+			}
+			dstFile, err := dstTree.File(fileTo.Path())
+			if err != nil {
+				return nil, fmt.Errorf("failed to get file from tree: %v", err)
+			}
+			dstContent, err := dstFile.Contents()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get file content: %v", err)
+			}
+
+			fd.Lines = vcsapi.Diff(srcContent, dstContent)
+		}
+
+		result = append(result, fd)
+	}
+
+	return result, nil
 }
 
 func (c GitClient) FindLatestRelease(stable bool) (vcsapi.VCSRelease, error) {

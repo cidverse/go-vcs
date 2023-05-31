@@ -26,6 +26,32 @@ func (_m *Client) Check() bool {
 	return r0
 }
 
+// Diff provides a mock function with given fields: from, to
+func (_m *Client) Diff(from *vcsapi.VCSRef, to *vcsapi.VCSRef) ([]vcsapi.VCSDiff, error) {
+	ret := _m.Called(from, to)
+
+	var r0 []vcsapi.VCSDiff
+	var r1 error
+	if rf, ok := ret.Get(0).(func(*vcsapi.VCSRef, *vcsapi.VCSRef) ([]vcsapi.VCSDiff, error)); ok {
+		return rf(from, to)
+	}
+	if rf, ok := ret.Get(0).(func(*vcsapi.VCSRef, *vcsapi.VCSRef) []vcsapi.VCSDiff); ok {
+		r0 = rf(from, to)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]vcsapi.VCSDiff)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(*vcsapi.VCSRef, *vcsapi.VCSRef) error); ok {
+		r1 = rf(from, to)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // FindCommitByHash provides a mock function with given fields: hash, includeChanges
 func (_m *Client) FindCommitByHash(hash string, includeChanges bool) (vcsapi.Commit, error) {
 	ret := _m.Called(hash, includeChanges)

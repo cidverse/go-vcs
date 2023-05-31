@@ -29,13 +29,18 @@ type CommitFile struct {
 	Name string `json:"name"`
 	Size int64  `json:"size"`
 	Hash string `json:"hash"`
+	Mode string `json:"mode,omitempty"`
 }
 
 type VCSDiff struct {
-	FileFrom  CommitFile        `json:"file_from"`
-	FileTo    CommitFile        `json:"file_to"`
-	Patch     string            `json:"patch"`
-	FileStats map[string]string `json:"file_stats,omitempty"`
+	FileFrom CommitFile    `json:"file_from"`
+	FileTo   CommitFile    `json:"file_to"`
+	Lines    []VCSDiffLine `json:"lines,omitempty"`
+}
+
+type VCSDiffLine struct {
+	Operation int    `json:"operation"`
+	Content   string `json:"content"`
 }
 
 type CommitAuthor struct {

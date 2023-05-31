@@ -40,6 +40,9 @@ type Client interface {
 	// FindCommitsBetween finds all commits between two references (might need to use GetReference to get the proper ref name)
 	FindCommitsBetween(from *VCSRef, to *VCSRef, includeChanges bool, limit int) ([]Commit, error)
 
+	// Diff returns the diff between two references (might need to use GetReference to get the proper ref name)
+	Diff(from *VCSRef, to *VCSRef) ([]VCSDiff, error)
+
 	// FindLatestRelease finds the latest release starting from the current repo HEAD
 	FindLatestRelease(stable bool) (VCSRelease, error)
 }
