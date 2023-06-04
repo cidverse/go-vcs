@@ -7,7 +7,7 @@ require (
 	github.com/go-git/go-git/v5 v5.7.0
 	github.com/gosimple/slug v1.13.1
 	github.com/rs/zerolog v1.29.1
-	github.com/sergi/go-diff v1.3.1
+	github.com/sergi/go-diff v1.1.0
 	github.com/stretchr/testify v1.8.4
 )
 
@@ -39,4 +39,10 @@ require (
 	golang.org/x/tools v0.9.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+)
+
+exclude (
+	// 1.2.0 and newer is broken, see https://github.com/sergi/go-diff/issues/123
+	github.com/sergi/go-diff v1.2.0
+	github.com/sergi/go-diff v1.3.1
 )
