@@ -45,6 +45,15 @@ type Client interface {
 
 	// FindLatestRelease finds the latest release starting from the current repo HEAD
 	FindLatestRelease(stable bool) (VCSRelease, error)
+
+	// CreateBranch creates a new local branch from the current head and checks it out
+	CreateBranch(branch string) error
+
+	// IsClean returns true if the repository is clean (no uncommitted changes)
+	IsClean() (bool, error)
+
+	// UncommittedChanges returns a list of all files with uncommitted changes
+	UncommittedChanges() ([]string, error)
 }
 
 // NewVCSRefFromString parses the input string and returns a VCSRef

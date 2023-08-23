@@ -48,6 +48,31 @@ func NewGitClient(dir string) (vcsapi.Client, error) {
 	return c, nil
 }
 
+func NewGitClientCloneFromURL(cloneURL string, localDir string, branch string) (vcsapi.Client, error) {
+	// clone repository (shallow)
+	repo, err := git.PlainClone(localDir, false, &git.CloneOptions{
+		URL:           cloneURL,
+		Progress:      os.Stdout,
+		ReferenceName: plumbing.ReferenceName("refs/heads/" + branch),
+		SingleBranch:  true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to clone repository from %s to %s: %w", cloneURL, localDir, err)
+	}
+
+	// open
+	c := GitClient{
+		dir:  localDir,
+		repo: repo,
+	}
+	if !c.Check() {
+		return nil, errors.New("is not a git repository")
+	}
+	c.isShallow = fileExists(filepath.Join(localDir, ".git", "shallow"))
+
+	return c, nil
+}
+
 func (c GitClient) Check() bool {
 	if _, err := os.Stat(path.Join(c.dir, ".git")); !os.IsNotExist(err) {
 		return true
@@ -376,6 +401,59 @@ func (c GitClient) FindLatestRelease(stable bool) (vcsapi.VCSRelease, error) {
 	}
 
 	return latest, nil
+}
+
+func (c GitClient) CreateBranch(branch string) error {
+	// create and checkout new branch
+	w, err := c.repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+	if err := w.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(branch),
+		Create: true,
+		Force:  true,
+	}); err != nil {
+		return fmt.Errorf("failed to checkout branch: %w", err)
+	}
+
+	return nil
+}
+
+func (c GitClient) IsClean() (bool, error) {
+	// create and checkout new branch
+	w, err := c.repo.Worktree()
+	if err != nil {
+		return false, fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// skip, if no files have changed
+	status, err := w.Status()
+	if err != nil {
+		return false, fmt.Errorf("failed to get status: %w", err)
+	}
+	return status.IsClean(), nil
+}
+
+func (c GitClient) UncommittedChanges() ([]string, error) {
+	// create and checkout new branch
+	w, err := c.repo.Worktree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// skip, if no files have changed
+	status, err := w.Status()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get status: %w", err)
+	}
+
+	var files []string
+	for file := range status {
+		files = append(files, file)
+	}
+
+	return files, nil
 }
 
 func gitFileActionToText(input merkletrie.Action) string {
