@@ -15,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 	"github.com/rs/zerolog/log"
 )
@@ -48,13 +49,14 @@ func NewGitClient(dir string) (vcsapi.Client, error) {
 	return c, nil
 }
 
-func NewGitClientCloneFromURL(cloneURL string, localDir string, branch string) (vcsapi.Client, error) {
+func NewGitClientCloneFromURL(cloneURL string, localDir string, branch string, auth transport.AuthMethod) (vcsapi.Client, error) {
 	// clone repository (shallow)
 	repo, err := git.PlainClone(localDir, false, &git.CloneOptions{
 		URL:           cloneURL,
 		Progress:      os.Stdout,
 		ReferenceName: plumbing.ReferenceName("refs/heads/" + branch),
 		SingleBranch:  true,
+		Auth:          auth,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to clone repository from %s to %s: %w", cloneURL, localDir, err)
