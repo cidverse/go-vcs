@@ -3,6 +3,7 @@ package gitclient
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path"
@@ -232,11 +233,18 @@ func (c GitClient) GetTagsByHash(hash string) []vcsapi.VCSRef {
 }
 
 func (c GitClient) FindCommitByHash(hash string, includeChanges bool) (vcsapi.Commit, error) {
-	cIter, _ := c.repo.Log(&git.LogOptions{All: true})
+	cIter, err := c.repo.Log(&git.LogOptions{All: true})
+	if err != nil {
+		return vcsapi.Commit{}, fmt.Errorf("failed to get commit iterator: %w", err)
+	}
+	defer cIter.Close()
 	for {
 		commit, commitErr := cIter.Next()
 		if commitErr != nil {
-			return vcsapi.Commit{}, commitErr
+			if errors.Is(commitErr, io.EOF) {
+				return vcsapi.Commit{}, fmt.Errorf("no commit with given hash found")
+			}
+			return vcsapi.Commit{}, fmt.Errorf("error iterating commits: %w", commitErr)
 		}
 
 		// check
