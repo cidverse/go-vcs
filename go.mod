@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/go-git/go-git/v5 v5.11.0
-	github.com/rs/zerolog v1.31.0
+	github.com/rs/zerolog v1.32.0
 	github.com/sergi/go-diff v1.1.0
 	github.com/stretchr/testify v1.8.4
 )
