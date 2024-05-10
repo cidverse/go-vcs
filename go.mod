@@ -39,9 +39,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-exclude (
-	// 1.2.0 and newer is broken, see https://github.com/sergi/go-diff/issues/123
-	github.com/sergi/go-diff v1.2.0
-	github.com/sergi/go-diff v1.3.0
-	github.com/sergi/go-diff v1.3.1
-)
+// 1.2.0 and newer is broken, see https://github.com/sergi/go-diff/issues/123
+exclude github.com/sergi/go-diff v1.3.1
