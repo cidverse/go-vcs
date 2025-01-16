@@ -2,7 +2,7 @@ module github.com/cidverse/go-vcs
 
 go 1.22.0
 
-toolchain go1.23.4
+toolchain go1.23.5
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
