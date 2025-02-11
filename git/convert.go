@@ -22,7 +22,9 @@ func gitCommitToVCSCommit(commit *object.Commit, tags []vcsapi.VCSRef, withConte
 	if withContent {
 		var err error
 		changes, err = gitCommitChangeToVCSCommitChange(commit)
-		log.Debug().Err(err).Str("hash", commit.Hash.String()).Msg("failed to get changes for commit")
+		if err != nil {
+			log.Debug().Err(err).Str("hash", commit.Hash.String()).Msg("failed to get changes for commit")
+		}
 	}
 
 	return vcsapi.Commit{

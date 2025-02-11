@@ -3,7 +3,6 @@ package gitclient
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path"
@@ -233,26 +232,12 @@ func (c GitClient) GetTagsByHash(hash string) []vcsapi.VCSRef {
 }
 
 func (c GitClient) FindCommitByHash(hash string, includeChanges bool) (vcsapi.Commit, error) {
-	cIter, err := c.repo.Log(&git.LogOptions{All: true})
+	commit, err := c.repo.CommitObject(plumbing.NewHash(hash))
 	if err != nil {
-		return vcsapi.Commit{}, fmt.Errorf("failed to get commit iterator: %w", err)
+		return vcsapi.Commit{}, fmt.Errorf("failed to get commit object: %w", err)
 	}
-	defer cIter.Close()
-	for {
-		commit, commitErr := cIter.Next()
-		if commitErr != nil {
-			if errors.Is(commitErr, io.EOF) {
-				return vcsapi.Commit{}, fmt.Errorf("no commit with given hash found")
-			}
-			return vcsapi.Commit{}, fmt.Errorf("error iterating commits: %w", commitErr)
-		}
 
-		// check
-		if hash == commit.Hash.String() || hash == commit.Hash.String()[:7] {
-			// return commit
-			return gitCommitToVCSCommit(commit, c.GetTagsByHash(commit.Hash.String()), includeChanges), nil
-		}
-	}
+	return gitCommitToVCSCommit(commit, c.GetTagsByHash(hash), includeChanges), nil
 }
 
 func (c GitClient) FindCommitsBetween(from *vcsapi.VCSRef, to *vcsapi.VCSRef, includeChanges bool, limit int) ([]vcsapi.Commit, error) {
