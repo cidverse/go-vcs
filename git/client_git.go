@@ -126,6 +126,13 @@ func (c GitClient) VCSHostType(server string) string {
 		return os.Getenv(toEnvName(server) + "_TYPE")
 	}
 
+	// host type probes
+	if isGitLabInstance(server) {
+		return "gitlab"
+	} else if isGiteaInstance(server) {
+		return "gitea"
+	}
+
 	return ""
 }
 
