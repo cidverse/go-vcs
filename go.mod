@@ -6,7 +6,7 @@ toolchain go1.24.2
 
 require (
 	github.com/Masterminds/semver/v3 v3.3.1
-	github.com/go-git/go-git/v5 v5.15.0
+	github.com/go-git/go-git/v5 v5.16.0
 	github.com/rs/zerolog v1.34.0
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3
 	github.com/stretchr/testify v1.10.0
