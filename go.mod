@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.25.0
 
 require (
-	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/go-git/go-git/v5 v5.18.0
 	github.com/rs/zerolog v1.35.1
 	github.com/sergi/go-diff v1.4.0
