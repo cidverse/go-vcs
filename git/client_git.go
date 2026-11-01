@@ -3,6 +3,7 @@ package gitclient
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path"
@@ -189,25 +190,7 @@ func ParseGitRefLogLine(line string, hash string) vcsapi.VCSRef {
 
 func (c GitClient) GetTags() []vcsapi.VCSRef {
 	if c.tags == nil {
-		var tags []vcsapi.VCSRef
-
-		iter, err := c.repo.Tags()
-		if err == nil {
-			iter.ForEach(func(r *plumbing.Reference) error {
-				if r.Name().IsTag() {
-					t := vcsapi.VCSRef{
-						Type:  "tag",
-						Value: strings.TrimPrefix(r.Name().String(), REF_TAGS),
-						Hash:  r.Hash().String(),
-					}
-					tags = append(tags, t)
-				}
-
-				return nil
-			})
-		}
-
-		c.tags = tags
+		c.tags = c.listTags()
 	}
 
 	return c.tags
@@ -215,27 +198,52 @@ func (c GitClient) GetTags() []vcsapi.VCSRef {
 
 func (c GitClient) GetTagsByHash(hash string) []vcsapi.VCSRef {
 	if c.tagsByHash == nil {
-		c.tagsByHash = make(map[string][]vcsapi.VCSRef)
-
-		iter, err := c.repo.Tags()
-		if err == nil {
-			iter.ForEach(func(r *plumbing.Reference) error {
-				if r.Name().IsTag() {
-					t := vcsapi.VCSRef{
-						Type:  "tag",
-						Value: strings.TrimPrefix(r.Name().String(), REF_TAGS),
-						Hash:  r.Hash().String(),
-					}
-
-					c.tagsByHash[r.Hash().String()] = append(c.tagsByHash[r.Hash().String()], t)
-				}
-
-				return nil
-			})
-		}
+		c.tagsByHash = c.tagsByCommitHash()
 	}
 
 	return c.tagsByHash[hash]
+}
+
+// listTags returns all tags, annotated tags are resolved to the hash of the commit they point to
+func (c GitClient) listTags() []vcsapi.VCSRef {
+	var tags []vcsapi.VCSRef
+
+	iter, err := c.repo.Tags()
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to list tags")
+		return tags
+	}
+
+	_ = iter.ForEach(func(r *plumbing.Reference) error {
+		if !r.Name().IsTag() {
+			return nil
+		}
+
+		hash, peelErr := peelToCommit(c.repo, r.Hash())
+		if peelErr != nil {
+			log.Debug().Err(peelErr).Str("tag", r.Name().String()).Msg("failed to resolve tag to commit")
+			hash = r.Hash()
+		}
+
+		tags = append(tags, vcsapi.VCSRef{
+			Type:  "tag",
+			Value: strings.TrimPrefix(r.Name().String(), REF_TAGS),
+			Hash:  hash.String(),
+		})
+		return nil
+	})
+
+	return tags
+}
+
+// tagsByCommitHash returns all tags indexed by the hash of the commit they point to
+func (c GitClient) tagsByCommitHash() map[string][]vcsapi.VCSRef {
+	result := make(map[string][]vcsapi.VCSRef)
+	for _, t := range c.listTags() {
+		result[t.Hash] = append(result[t.Hash], t)
+	}
+
+	return result
 }
 
 func (c GitClient) FindCommitByHash(hash string, includeChanges bool) (vcsapi.Commit, error) {
@@ -257,35 +265,59 @@ func (c GitClient) FindCommitsBetween(from *vcsapi.VCSRef, to *vcsapi.VCSRef, in
 		}
 		fromHash = head.Hash()
 	} else {
-		fromHash, _ = refToHash(c.repo, c.VCSRefToInternalRef(*from))
+		var err error
+		fromHash, err = refToHash(c.repo, c.VCSRefToInternalRef(*from))
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve from reference %s: %w", c.VCSRefToInternalRef(*from), err)
+		}
 	}
 
 	// to reference
 	var toHash plumbing.Hash
 	if to != nil {
-		toHash, _ = refToHash(c.repo, c.VCSRefToInternalRef(*to))
+		var err error
+		toHash, err = refToHash(c.repo, c.VCSRefToInternalRef(*to))
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve to reference %s: %w", c.VCSRefToInternalRef(*to), err)
+		}
 	}
 
 	// commit iterator
-	cIter, _ := c.repo.Log(&git.LogOptions{From: fromHash})
+	cIter, err := c.repo.Log(&git.LogOptions{From: fromHash})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit log from %s: %w", fromHash.String(), err)
+	}
+	defer cIter.Close()
+
+	tagsByHash := c.tagsByCommitHash()
 	var commits []vcsapi.Commit
 	for {
 		commit, commitErr := cIter.Next()
-		if commitErr != nil {
+		if errors.Is(commitErr, io.EOF) {
 			break
+		} else if commitErr != nil {
+			// shallow clones end with a missing parent, which is the end of the available history
+			if to == nil && c.isShallow && errors.Is(commitErr, plumbing.ErrObjectNotFound) {
+				break
+			}
+			return nil, fmt.Errorf("failed to iterate commits from %s: %w", fromHash.String(), commitErr)
 		}
 
 		// check
-		if to != nil && toHash.String() == commit.Hash.String() {
-			break
+		if to != nil && toHash == commit.Hash {
+			return commits, nil
 		}
 
 		// limit
 		if limit != 0 && len(commits) >= limit {
-			break
+			return commits, nil
 		}
 
-		commits = append(commits, gitCommitToVCSCommit(commit, c.GetTagsByHash(commit.Hash.String()), includeChanges))
+		commits = append(commits, gitCommitToVCSCommit(commit, tagsByHash[commit.Hash.String()], includeChanges))
+	}
+
+	if to != nil {
+		return nil, fmt.Errorf("reference %s (%s) is not an ancestor of %s", c.VCSRefToInternalRef(*to), toHash.String(), fromHash.String())
 	}
 
 	return commits, nil
@@ -303,13 +335,21 @@ func (c GitClient) Diff(from *vcsapi.VCSRef, to *vcsapi.VCSRef) ([]vcsapi.VCSDif
 		}
 		fromHash = head.Hash()
 	} else {
-		fromHash, _ = refToHash(c.repo, c.VCSRefToInternalRef(*from))
+		var err error
+		fromHash, err = refToHash(c.repo, c.VCSRefToInternalRef(*from))
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve from reference %s: %w", c.VCSRefToInternalRef(*from), err)
+		}
 	}
 
 	// to reference
 	var toHash plumbing.Hash
 	if to != nil {
-		toHash, _ = refToHash(c.repo, c.VCSRefToInternalRef(*to))
+		var err error
+		toHash, err = refToHash(c.repo, c.VCSRefToInternalRef(*to))
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve to reference %s: %w", c.VCSRefToInternalRef(*to), err)
+		}
 	}
 
 	// find commits
@@ -319,7 +359,7 @@ func (c GitClient) Diff(from *vcsapi.VCSRef, to *vcsapi.VCSRef) ([]vcsapi.VCSDif
 	}
 	toCommit, err := c.repo.CommitObject(toHash)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commit object for %s: %v", fromHash.String(), err)
+		return nil, fmt.Errorf("failed to get commit object for %s: %v", toHash.String(), err)
 	}
 
 	// diff
@@ -477,15 +517,33 @@ func refToHash(repo *git.Repository, ref string) (hash plumbing.Hash, err error)
 		if err != nil {
 			return hash, err
 		}
-		hash = pRef.Hash()
-	} else {
-		var commit *object.Commit
-		commit, err = repo.CommitObject(plumbing.NewHash(ref))
-		if err != nil {
-			return hash, err
-		}
-		hash = commit.Hash
+		return peelToCommit(repo, pRef.Hash())
 	}
 
-	return hash, err
+	var commit *object.Commit
+	commit, err = repo.CommitObject(plumbing.NewHash(ref))
+	if err != nil {
+		return hash, err
+	}
+
+	return commit.Hash, nil
+}
+
+// peelToCommit follows annotated tag objects until it reaches the commit they point to, other hashes are returned as-is
+func peelToCommit(repo *git.Repository, hash plumbing.Hash) (plumbing.Hash, error) {
+	for {
+		tag, err := repo.TagObject(hash)
+		if errors.Is(err, plumbing.ErrObjectNotFound) {
+			return hash, nil // not a tag object
+		} else if err != nil {
+			return hash, err
+		}
+
+		switch tag.TargetType {
+		case plumbing.CommitObject, plumbing.TagObject:
+			hash = tag.Target
+		default:
+			return hash, fmt.Errorf("tag %s points to a %s, not a commit", tag.Name, tag.TargetType)
+		}
+	}
 }
